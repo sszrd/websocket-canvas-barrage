@@ -1,0 +1,110 @@
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>实时弹幕系统</title>
+    <style>
+        body {
+            padding: 0;
+            margin: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        canvas {
+            border: solid black 3px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas" width="600px" height="300px"></canvas>
+    <section>
+        <input type="text" size="80">
+        <button>发送</button>
+    </section>
+    <script>
+        (() => {
+            const url = "ws://localhost:8000";
+
+            class BarrageSystem {
+                constructor(canvas) {
+                    this.canvas = canvas;
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.width = rect.right - rect.left;
+                    this.height = rect.bottom - rect.top;
+                    this.ctx = this.canvas.getContext("2d");
+                    this.barrageList = [];
+                }
+
+                add(barrage) {
+                    this.barrageList.push(barrage);
+                }
+
+                update() {
+                    if (this.barrageList.length) {
+                        //清空画布
+                        this.ctx.clearRect(0, 0, this.width, this.height);
+                        for (let i = 0; i < this.barrageList.length; i++) {
+                            const barrage = this.barrageList[i];
+                            //文本向左偏移
+                            barrage.left -= barrage.offset;
+                            this.ctx.fillText(barrage.value, barrage.left, barrage.top);
+                            if (barrage.width + barrage.left <= 0) {
+                                this.barrageList.splice(i, 1);
+                                i--;
+                            }
+                        }
+                    }
+                    requestAnimationFrame(this.update.bind(this));
+                }
+            }
+
+            class Barrage extends BarrageSystem {
+                constructor(canvas, value) {
+                    super(canvas);
+                    this.value = value;
+                    this.left = this.width;
+                    this.top = this.getTop();
+                    this.offset = this.getOffset();
+                    this.width = this.ctx.measureText(value).width;
+                }
+
+                getTop() {
+                    return Math.floor(Math.random() * (this.height - 40)) + 20;
+                }
+
+                getOffset() {
+                    return Math.floor(Math.random() * 2) + 1;
+                }
+            }
+
+            const sys = new BarrageSystem(canvas);
+            sys.update();
+
+            const ws = new WebSocket(url);
+            ws.onopen = () => {
+                ws.onmessage = (e) => {
+                    const reader = new FileReader();
+                    reader.readAsText(e.data, "utf-8");
+                    reader.onload = function () {
+                        sys.add(new Barrage(canvas, reader.result));
+                    }
+                }
+                document.querySelector("button").onclick = function () {
+                    const input = document.querySelector("input")
+                    ws.send(input.value);
+                    input.value = "";
+                }
+            }
+        })();
+    </script>
+</body>
+
+</html>
